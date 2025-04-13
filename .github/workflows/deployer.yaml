@@ -1,0 +1,24 @@
+name: Docker Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  docker-release:
+    uses: mbround18/gh-reusable/.github/workflows/docker-release.yaml@main
+    with:
+      image: "mbround18/steamcmd-bases"
+      compose: true
+      # Add your workflow inputs here if required
+      # For example:
+      # image-name: your-image-name
+      # platforms: linux/amd64,linux/arm64
+    secrets: inherit

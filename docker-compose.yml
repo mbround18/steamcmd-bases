@@ -1,0 +1,36 @@
+services:
+  steamcmd:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: steamcmd
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+      cache_from:
+        - mbround18/steamcmd:cache
+    image: mbround18/steamcmd:${VERSION:-latest}
+    restart: no
+
+  steamcmd-wine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: steamcmd-wine
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+      cache_from:
+        - mbround18/steamcmd-wine:cache
+    image: mbround18/steamcmd-wine:${VERSION:-latest}
+    restart: no
+
+  steamcmd-proton:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: steamcmd-proton
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+      cache_from:
+        - mbround18/steamcmd-proton:cache
+    image: mbround18/steamcmd-proton:${VERSION:-latest}
+    restart: no

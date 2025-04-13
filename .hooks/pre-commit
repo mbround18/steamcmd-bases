@@ -1,0 +1,19 @@
+#!/bin/bash
+# pre-commit hook that runs pretty-quick to format staged files
+
+echo "🧹 Running pre-commit hook..."
+
+# Run the lint make target
+make lint
+
+# Get exit code of make lint
+RESULT=$?
+
+# If non-zero exit code, abort commit
+if [ $RESULT -ne 0 ]; then
+  echo "❌ Linting errors found. Fix them before committing."
+  exit 1
+fi
+
+echo "✅ Code formatting looks good!"
+exit 0
