@@ -17,8 +17,8 @@ jobs:
     with:
       image: "mbround18/steamcmd-bases"
       compose: true
-      # Add your workflow inputs here if required
-      # For example:
-      # image-name: your-image-name
-      # platforms: linux/amd64,linux/arm64
+    secrets: inherit
+
+  tagger:
+    uses: mbround18/gh-reusable/.github/workflows/tagger.yaml@main
     secrets: inherit
