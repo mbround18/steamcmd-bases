@@ -13,10 +13,14 @@ on:
 
 jobs:
   docker-release:
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [steamcmd, steamcmd-wine, steamcmd-proton]
     uses: mbround18/gh-reusable/.github/workflows/docker-release.yaml@main
     with:
       image: "mbround18/steamcmd-bases"
-      compose: true
+      target: "${{ matrix.target }}"
     secrets: inherit
 
   tagger:

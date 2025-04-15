@@ -3,34 +3,34 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: steamcmd
+      target: base
       args:
         - BUILDKIT_INLINE_CACHE=1
       cache_from:
-        - mbround18/steamcmd:cache
-    image: mbround18/steamcmd:${VERSION:-latest}
+        - mbround18/steamcmd:base-cache
+    image: mbround18/steamcmd:base-${VERSION:-latest}
     restart: no
 
   steamcmd-wine:
     build:
       context: .
       dockerfile: Dockerfile
-      target: steamcmd-wine
+      target: wine
       args:
         - BUILDKIT_INLINE_CACHE=1
       cache_from:
-        - mbround18/steamcmd-wine:cache
-    image: mbround18/steamcmd-wine:${VERSION:-latest}
+        - mbround18/steamcmd:wine-cache
+    image: mbround18/steamcmd:wine-${VERSION:-latest}
     restart: no
 
   steamcmd-proton:
     build:
       context: .
       dockerfile: Dockerfile
-      target: steamcmd-proton
+      target: proton
       args:
         - BUILDKIT_INLINE_CACHE=1
       cache_from:
-        - mbround18/steamcmd-proton:cache
-    image: mbround18/steamcmd-proton:${VERSION:-latest}
+        - mbround18/steamcmd:proton-cache
+    image: mbround18/steamcmd:proton-${VERSION:-latest}
     restart: no

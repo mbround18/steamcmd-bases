@@ -1,7 +1,7 @@
-# syntax=docker/dockerfile:1.4
+# syntax=docker/dockerfile:1.15
 ARG UBUNTU_VERSION=24.04
 
-FROM ubuntu:${UBUNTU_VERSION} AS base
+FROM ubuntu:${UBUNTU_VERSION} AS steamcmd-base
 ARG DEBIAN_FRONTEND=noninteractive
 ENV TZ=America/Los_Angeles LANG=en_US.UTF-8 LANGUAGE=en_US:en
 
@@ -64,7 +64,7 @@ ENTRYPOINT ["/opt/steamcmd-bases/entrypoint.sh"]
 #################
 # Wine Extension
 #################
-FROM base AS wine
+FROM steamcmd-base AS wine-base
 ARG WINEARCH=win64
 ENV WINEDEBUG=fixme-all
 
@@ -97,7 +97,7 @@ RUN ln -sf /opt/steamcmd-bases/bin/game-launcher.sh /usr/local/bin/game-launcher
 #################
 # Proton Extension
 #################
-FROM wine AS proton
+FROM wine-base AS proton-base
 ARG PROTON_VERSION=8.0-6
 ENV STEAM_COMPAT_CLIENT_INSTALL_PATH=/home/steam/.steam/steam \
     STEAM_COMPAT_DATA_PATH=/home/steam/.proton \
@@ -165,17 +165,17 @@ RUN echo "Installed Proton version:" && ls -la /home/steam/.steam/root/compatibi
 #################
 # Final Targets
 #################
-FROM base AS steamcmd
+FROM steamcmd-base AS base
 WORKDIR /home/steam
 USER steam
 CMD ["steamcmd", "+quit"]
 
-FROM wine AS steamcmd-wine
+FROM wine-base AS wine
 WORKDIR /home/steam
 USER steam
 CMD ["steamcmd", "+@sSteamCmdForcePlatformType", "windows", "+quit"]
 
-FROM proton AS steamcmd-proton
+FROM proton-base AS proton
 WORKDIR /home/steam
 USER steam
 # Set default Proton binary path
