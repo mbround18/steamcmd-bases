@@ -24,5 +24,7 @@ jobs:
     secrets: inherit
 
   tagger:
+    needs: docker-release
+    if: ${{ github.ref == 'refs/heads/main' }}
     uses: mbround18/gh-reusable/.github/workflows/tagger.yaml@main
     secrets: inherit
