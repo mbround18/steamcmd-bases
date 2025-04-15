@@ -16,7 +16,6 @@ jobs:
     uses: mbround18/gh-reusable/.github/workflows/docker-release.yaml@main
     with:
       image: "mbround18/steamcmd-bases"
-      compose: true
       # Add your workflow inputs here if required
       # For example:
       # image-name: your-image-name
