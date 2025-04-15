@@ -16,11 +16,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [steamcmd, steamcmd-wine, steamcmd-proton]
+        target: [base, wine, proton]
     uses: mbround18/gh-reusable/.github/workflows/docker-release.yaml@main
     with:
-      image: "mbround18/steamcmd-bases"
+      image: "mbround18/steamcmd"
       target: "${{ matrix.target }}"
+      prepend_target: true
     secrets: inherit
 
   tagger:
