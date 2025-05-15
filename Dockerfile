@@ -82,7 +82,8 @@ RUN --mount=type=cache,target=/var/cache/apt \
     wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources && \
     apt-get update && \
     apt-get install -y --install-recommends winehq-stable winbind cabextract && \
-    apt-get clean
+    apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Optional: Install Winetricks
 ADD --chmod=755 https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks /usr/local/bin/winetricks
@@ -98,19 +99,19 @@ RUN ln -sf /opt/steamcmd-bases/bin/game-launcher.sh /usr/local/bin/game-launcher
 # Proton Extension
 #################
 FROM wine-base AS proton-base
-ARG PROTON_VERSION=8.0-6
 ENV STEAM_COMPAT_CLIENT_INSTALL_PATH=/home/steam/.steam/steam \
     STEAM_COMPAT_DATA_PATH=/home/steam/.proton \
     WINETRICKS_LATEST_VERSION_CHECK=disabled
 
 # Install additional packages required for Proton
 RUN --mount=type=cache,target=/var/cache/apt \
-    --mount=type=cache,target=/var/lib/apt/lists \
+    --mount=type=cache,target=/var/lib/apt \
     apt-get update \
     && apt-get install -y --no-install-recommends \
        xvfb python3 python3-pip libfreetype6 libfreetype6-dev \
        libxkbcommon0 xauth jq curl \
-    && apt-get clean
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 USER steam
 WORKDIR /home/steam
@@ -120,19 +121,34 @@ RUN mkdir -p /home/steam/.steam/root/compatibilitytools.d \
     && mkdir -p /home/steam/.proton
 
 # Download and install latest GE-Proton version automatically
-RUN mkdir -p /tmp/proton-ge \
-    && cd /tmp/proton-ge \
+RUN --mount=type=tmpfs,target=/tmp/proton-ge \
+    cd /tmp/proton-ge \
     && LATEST_VERSION=$(curl -s https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest | jq -r .tag_name) \
     && echo "Installing GloriousEggroll Proton version: ${LATEST_VERSION}" \
     && DOWNLOAD_URL=$(curl -s https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest | jq -r '.assets[] | select(.name | endswith(".tar.gz")) | .browser_download_url') \
     && curl -sL "${DOWNLOAD_URL}" -o proton.tar.gz \
-    && tar xzf proton.tar.gz -C /home/steam/.steam/root/compatibilitytools.d/ \
-    && rm -rf /tmp/proton-ge
+    && tar xzf proton.tar.gz -C /home/steam/.steam/root/compatibilitytools.d/ 
 
 # Create necessary symlinks for Steam structure
 RUN mkdir -p /home/steam/.steam/steam \
     && ln -sf /home/steam/.steam/root /home/steam/.steam/steam \
     && mkdir -p /home/steam/.steam/root/steamapps/common
+
+# Download and install latest UMU Launcher
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt \
+    --mount=type=tmpfs,target=/tmp/umu \
+    mkdir -p /tmp/umu \
+    && cd /tmp/umu \
+    && sudo apt-get update \
+    && sudo apt-get install -y fonts-liberation libegl1 libnm0 libva-glx2 mesa-vulkan-drivers \
+       steam-devices xdg-desktop-portal xdg-desktop-portal-gtk xdg-utils xterm \
+       zenity python3-xxhash python3-cbor2 \
+    && LATEST_UMU_VERSION=$(curl -s https://api.github.com/repos/Open-Wine-Components/umu-launcher/releases/latest | jq -r .tag_name) \
+    && echo "Installing UMU Launcher version: ${LATEST_UMU_VERSION}" \
+    && DOWNLOAD_URL=$(curl -s https://api.github.com/repos/Open-Wine-Components/umu-launcher/releases/latest | jq -r '.assets[] | select(.name | contains("ubuntu-noble") and endswith(".deb")) | .browser_download_url') \
+    && curl -sL "${DOWNLOAD_URL}" -o umu-launcher.deb \
+    && sudo dpkg -i ./umu-launcher.deb || sudo apt-get install -f -y
 
 USER root
 
@@ -178,6 +194,5 @@ CMD ["steamcmd", "+@sSteamCmdForcePlatformType", "windows", "+quit"]
 FROM proton-base AS proton
 WORKDIR /home/steam
 USER steam
-# Set default Proton binary path
-ENV PROTON_PATH=/home/steam/.steam/steam/compatibilitytools.d/GE-Proton${PROTON_VERSION}/proton
+
 CMD ["steamcmd", "+quit"]

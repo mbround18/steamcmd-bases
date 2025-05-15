@@ -1,10 +1,13 @@
-.PHONY: docker-build docker-dev docker-push setup lint
+.PHONY: docker-build docker-dev docker-push setup lint docker-build-fresh
 GIT_TAG := $(shell git rev-parse --short HEAD)
 export COMPOSE_BAKE=true
 export VERSION=$(GIT_TAG)
 
 docker-build:
-	@docker compose build
+	@docker compose build --no-cache
+
+docker-build-fresh:
+	@docker compose build --no-cache --pull
 
 docker-dev: docker-build
 	@docker compose up --abort-on-container-exit
