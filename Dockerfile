@@ -11,7 +11,8 @@ RUN --mount=type=cache,target=/var/cache/apt \
     apt-get update \
     && apt-get install -y --no-install-recommends \
        ca-certificates tzdata software-properties-common \
-       curl wget unzip sudo gnupg2 gosu dos2unix locales
+       curl wget unzip sudo gnupg2 gosu dos2unix locales \
+    && apt-get clean
 
 # Set timezone and locale
 RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
@@ -52,14 +53,14 @@ RUN groupadd -g 1000 steam \
 RUN chown -R steam:steam /home/steam
 
 # Create script directories
-RUN mkdir -p /opt/steamcmd-bases/scripts.d /opt/steamcmd-bases/bin
+RUN mkdir -p /scripts.d /bin
 
 # Copy scripts to base image
-COPY --chmod=755 scripts/entrypoint.sh /opt/steamcmd-bases/entrypoint.sh
-COPY --chmod=755 scripts/scripts.d/00-common-init.sh /opt/steamcmd-bases/scripts.d/
+COPY --chmod=755 scripts/entrypoint.sh /entrypoint.sh
+COPY --chmod=755 scripts/scripts.d/00-common-init.sh /scripts.d/
 
 # Set entrypoint
-ENTRYPOINT ["/opt/steamcmd-bases/entrypoint.sh"]
+ENTRYPOINT ["/entrypoint.sh"]
 
 #################
 # Wine Extension
@@ -83,17 +84,11 @@ RUN --mount=type=cache,target=/var/cache/apt \
     apt-get update && \
     apt-get install -y --install-recommends winehq-stable winbind cabextract && \
     apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /scripts.d/ 
 
-# Optional: Install Winetricks
+# Optional: Install Winetricks and create symlinks for utility scripts
 ADD --chmod=755 https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks /usr/local/bin/winetricks
-
-# Copy Wine-specific scripts
-COPY --chmod=755 scripts/scripts.d/10-wine-init.sh /opt/steamcmd-bases/scripts.d/
-COPY --chmod=755 scripts/bin/game-launcher.sh /opt/steamcmd-bases/bin/
-
-# Create symlinks for utility scripts
-RUN ln -sf /opt/steamcmd-bases/bin/game-launcher.sh /usr/local/bin/game-launcher
 
 #################
 # Proton Extension
@@ -106,71 +101,49 @@ ENV STEAM_COMPAT_CLIENT_INSTALL_PATH=/home/steam/.steam/steam \
 # Install additional packages required for Proton
 RUN --mount=type=cache,target=/var/cache/apt \
     --mount=type=cache,target=/var/lib/apt \
-    apt-get update \
-    && apt-get install -y --no-install-recommends \
-       xvfb python3 python3-pip libfreetype6 libfreetype6-dev \
-       libxkbcommon0 xauth jq curl \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-USER steam
-WORKDIR /home/steam
-
-# Create Steam directory structure following official patterns
-RUN mkdir -p /home/steam/.steam/root/compatibilitytools.d \
-    && mkdir -p /home/steam/.proton
-
-# Download and install latest GE-Proton version automatically
-RUN --mount=type=tmpfs,target=/tmp/proton-ge \
-    cd /tmp/proton-ge \
-    && LATEST_VERSION=$(curl -s https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest | jq -r .tag_name) \
-    && echo "Installing GloriousEggroll Proton version: ${LATEST_VERSION}" \
-    && DOWNLOAD_URL=$(curl -s https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest | jq -r '.assets[] | select(.name | endswith(".tar.gz")) | .browser_download_url') \
-    && curl -sL "${DOWNLOAD_URL}" -o proton.tar.gz \
-    && tar xzf proton.tar.gz -C /home/steam/.steam/root/compatibilitytools.d/ 
-
-# Create necessary symlinks for Steam structure
-RUN mkdir -p /home/steam/.steam/steam \
-    && ln -sf /home/steam/.steam/root /home/steam/.steam/steam \
-    && mkdir -p /home/steam/.steam/root/steamapps/common
-
-# Download and install latest UMU Launcher
-RUN --mount=type=cache,target=/var/cache/apt \
-    --mount=type=cache,target=/var/lib/apt \
     --mount=type=tmpfs,target=/tmp/umu \
-    mkdir -p /tmp/umu \
+    dpkg --add-architecture i386 \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        fonts-liberation libegl1 libnm0 libva-glx2 mesa-vulkan-drivers \
+        steam-devices xdg-desktop-portal xdg-desktop-portal-gtk xdg-utils xterm \
+        libgl1-mesa-dri:i386 libglx-mesa0:i386 libvulkan1:i386 libxcb-glx0:i386 \
+        python3-xlib apparmor-profiles apparmor \
+        zenity python3-xxhash python3-cbor2 \
+        xvfb python3 libfreetype6 libfreetype6-dev \
+       libxkbcommon0 xauth jq curl \
+    && mkdir -p /home/steam/.steam/root/compatibilitytools.d \
+    && mkdir -p /home/steam/.proton \
+    && mkdir -p /home/steam/.steam/steam \
+    && ln -sf /home/steam/.steam/root /home/steam/.steam/steam \
+    && mkdir -p /home/steam/.steam/root/steamapps/common \
+    # Install UMU Launcher
+    && mkdir -p /tmp/umu \
     && cd /tmp/umu \
-    && sudo apt-get update \
-    && sudo apt-get install -y fonts-liberation libegl1 libnm0 libva-glx2 mesa-vulkan-drivers \
-       steam-devices xdg-desktop-portal xdg-desktop-portal-gtk xdg-utils xterm \
-       zenity python3-xxhash python3-cbor2 \
     && LATEST_UMU_VERSION=$(curl -s https://api.github.com/repos/Open-Wine-Components/umu-launcher/releases/latest | jq -r .tag_name) \
     && echo "Installing UMU Launcher version: ${LATEST_UMU_VERSION}" \
-    && DOWNLOAD_URL=$(curl -s https://api.github.com/repos/Open-Wine-Components/umu-launcher/releases/latest | jq -r '.assets[] | select(.name | contains("ubuntu-noble") and endswith(".deb")) | .browser_download_url') \
+    && DOWNLOAD_URL=$(curl -s https://api.github.com/repos/Open-Wine-Components/umu-launcher/releases/latest | jq -r '.assets[] | select(.name | startswith("python3") and contains("ubuntu-noble") and endswith(".deb")) | .browser_download_url') \
+    && curl -sL "${DOWNLOAD_URL}" -o python3-umu-launcher.deb \
+    && dpkg -i ./python3-umu-launcher.deb || sudo apt-get install -f -y \
+    && DOWNLOAD_URL=$(curl -s https://api.github.com/repos/Open-Wine-Components/umu-launcher/releases/latest | jq -r '.assets[] | select(.name | contains("all_ubuntu-noble") and endswith(".deb")) | .browser_download_url') \
     && curl -sL "${DOWNLOAD_URL}" -o umu-launcher.deb \
-    && sudo dpkg -i ./umu-launcher.deb || sudo apt-get install -f -y
-
-USER root
-
-# Copy utility scripts
-COPY --chmod=755 scripts/proton-run.sh /usr/local/bin/proton-run
-COPY --chmod=755 scripts/proton-manager.sh /usr/local/bin/proton-manager
-COPY --chmod=755 scripts/proton-diagnose.sh /usr/local/bin/proton-diagnose
-
-# Copy Proton-specific initialization scripts
-COPY --chmod=755 scripts/scripts.d/20-proton-init.sh /opt/steamcmd-bases/scripts.d/
-COPY --chmod=755 scripts/scripts.d/99-cleanup.sh /opt/steamcmd-bases/scripts.d/
-
-# Add symbolic links for libraries
-RUN ln -s /usr/lib/i386-linux-gnu/libncurses.so.6 /usr/lib/i386-linux-gnu/libncurses.so.5 2>/dev/null || true \
+    && dpkg -i ./umu-launcher.deb || sudo apt-get install -f -y \
+    && rm -rf /tmp/umu/* \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /scripts.d/ \
+    # Create symlinks for Proton and UMU Launcher
+    && ln -s /usr/lib/i386-linux-gnu/libncurses.so.6 /usr/lib/i386-linux-gnu/libncurses.so.5 2>/dev/null || true \
     && ln -s /usr/lib/x86_64-linux-gnu/libncurses.so.6 /usr/lib/x86_64-linux-gnu/libncurses.so.5 2>/dev/null || true \
     && mkdir -p /home/steam/.steam/sdk64 \
     && ln -sf /root/.steam/sdk64/steamclient.so /home/steam/.steam/sdk64/steamclient.so 2>/dev/null || true \
-    && chown -R steam:steam /home/steam
+    && chown -R steam:steam /home/steam \
+    && PROTON_DIR=$(find /home/steam/.steam/root/compatibilitytools.d -maxdepth 1 -type d -name "GE-Proton*" | sort -V | tail -n 1) \
+    && echo "export PROTON_PATH=${PROTON_DIR}/proton" >> /home/steam/.bashrc \
+    # Clean APT Cache 
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* 
 
-# Set environment variable for the exact Proton path
-RUN PROTON_DIR=$(find /home/steam/.steam/root/compatibilitytools.d -maxdepth 1 -type d -name "GE-Proton*" | sort -V | tail -n 1) \
-    && echo "export PROTON_PATH=${PROTON_DIR}/proton" >> /home/steam/.bashrc
 
 USER steam
 WORKDIR /home/steam
