@@ -1,4 +1,7 @@
 .idea/
 .github/
 *.md
+.hooks/
+*.md
+*.json
 
