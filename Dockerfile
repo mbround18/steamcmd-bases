@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.20
-ARG UBUNTU_VERSION=24.04
+ARG UBUNTU_VERSION=26.04
 
 FROM ubuntu:${UBUNTU_VERSION} AS steamcmd-base
 ARG DEBIAN_FRONTEND=noninteractive
