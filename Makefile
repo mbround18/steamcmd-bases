@@ -1,16 +1,21 @@
-.PHONY: docker-build docker-dev docker-push setup lint
+.PHONY: docker-build docker-dev docker-push build-test-exe setup lint
 GIT_TAG := $(shell git rev-parse --short HEAD)
-export COMPOSE_BAKE=true
+export TAG=$(GIT_TAG)
 export VERSION=$(GIT_TAG)
 
-docker-build:
-	@docker compose build
+# The wine/proton Docker targets COPY this binary in; it has to exist
+# on the host before `docker buildx bake` runs.
+build-test-exe:
+	@cargo build --release
+
+docker-build: build-test-exe
+	@docker buildx bake --load
 
 docker-dev: docker-build
 	@docker compose up --abort-on-container-exit
 
-docker-push: docker-build
-	@docker compose push
+docker-push: build-test-exe
+	@docker buildx bake --push
 
 setup:
 	@echo "Setting up git hooks..."

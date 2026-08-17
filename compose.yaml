@@ -1,14 +1,16 @@
 services:
+  # `docker compose build`/`push` work directly against these (handy for local
+  # iteration). CI and multi-tag/registry-cache pushes go through
+  # `docker buildx bake` instead (see docker-bake.hcl / Makefile) - that stays
+  # the source of truth for tagging/caching, this is the lightweight mirror.
+  # Either way: `cargo build --release` must have run first (see Makefile),
+  # since the wine/proton targets COPY target/release/{test-exe,dockerify}.
   steamcmd:
     build:
       context: .
       dockerfile: Dockerfile
       target: base
-      args:
-        - BUILDKIT_INLINE_CACHE=1
-      cache_from:
-        - mbround18/steamcmd:base-cache
-    image: mbround18/steamcmd:base-${VERSION:-latest}
+    image: mbround18/steamcmd:base-${TAG:-latest}
     restart: no
 
   steamcmd-wine:
@@ -16,11 +18,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: wine
-      args:
-        - BUILDKIT_INLINE_CACHE=1
-      cache_from:
-        - mbround18/steamcmd:wine-cache
-    image: mbround18/steamcmd:wine-${VERSION:-latest}
+    image: mbround18/steamcmd:wine-${TAG:-latest}
     restart: no
 
   steamcmd-proton:
@@ -29,8 +27,6 @@ services:
       dockerfile: Dockerfile
       target: proton
       args:
-        - BUILDKIT_INLINE_CACHE=1
-      cache_from:
-        - mbround18/steamcmd:proton-cache
-    image: mbround18/steamcmd:proton-${VERSION:-latest}
+        PROTON_VERSION: ${PROTON_VERSION:-latest}
+    image: mbround18/steamcmd:proton-${TAG:-latest}
     restart: no
