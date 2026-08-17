@@ -3,7 +3,7 @@ use dockerify::{
     default_compat_dir, default_proton_prefix, default_steam_compat_client_install_path,
     default_steam_compat_data_path, default_wine_prefix, list_installed_proton_versions,
     parse_release_tag, parse_release_tags, proton_asset_url, proton_latest_release_api_url,
-    proton_releases_api_url, resolve_proton_dir,
+    proton_releases_api_url, resolve_proton_dir, setup_steam_client_symlinks,
 };
 use std::env;
 use std::path::{Path, PathBuf};
@@ -33,6 +33,11 @@ enum Cmd {
     },
     /// Diagnose the Wine/Proton environment (installations, env vars, display, libraries)
     Diagnose,
+    /// (Re)create ~/.steam/sdk32|64 -> steamcmd's install dir, and
+    /// steamservice.so -> steamclient.so inside each. `dockerify run` already
+    /// does this automatically right before launching - this is for manual
+    /// use (e.g. from an init script, right after `steamcmd +app_update`).
+    LinkSteamClient,
 }
 
 #[derive(Subcommand)]
@@ -93,6 +98,10 @@ fn main() -> ExitCode {
             ProtonCmd::Use { version } => proton_use(&home, &version).map(|_| 0),
         },
         Cmd::Diagnose => diagnose(&home).map(|_| 0),
+        Cmd::LinkSteamClient => {
+            link_steam_client(&home);
+            Ok(0)
+        }
     };
 
     match result {
@@ -106,10 +115,22 @@ fn main() -> ExitCode {
 
 // ─── run ────────────────────────────────────────────────────────────────
 
+fn link_steam_client(home: &Path) {
+    for link in setup_steam_client_symlinks(home) {
+        println!("✓ linked {link}");
+    }
+}
+
 fn run_cmd(home: &Path, args: RunArgs) -> Result<i32, String> {
     if !args.exe.exists() {
         return Err(format!("executable not found: {}", args.exe.display()));
     }
+
+    // Retry point: setup_steam_client_symlinks() may have already run during
+    // setup/init, but steamcmd might not have downloaded steamclient.so yet
+    // at that point. By the time we're actually spawning the server,
+    // steamcmd has definitely run - so this is what actually has to succeed.
+    link_steam_client(home);
 
     let use_proton = if args.proton {
         true

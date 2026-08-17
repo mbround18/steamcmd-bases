@@ -42,6 +42,13 @@ if [ -z "${DISPLAY:-}" ] && command -v Xvfb &> /dev/null; then
     export SDL_VIDEODRIVER=x11
 fi
 
+# Best-effort now (steamcmd may not have installed a game yet, so this can
+# legitimately be a no-op) - dockerify run retries this right before it
+# actually spawns the server, which is the call that has to succeed.
+if command -v dockerify &> /dev/null; then
+    dockerify link-steam-client
+fi
+
 # Initialize Proton prefix if it doesn't exist (idempotent)
 if [ ! -d "$WINEPREFIX" ] || [ ! -f "$WINEPREFIX/system.reg" ]; then
     echo "🏗️ Creating new Proton prefix at $WINEPREFIX"

@@ -32,14 +32,24 @@ RUN --mount=type=cache,target=/var/cache/apt \
 # Symlink SteamCMD
 RUN ln -s /usr/games/steamcmd /usr/bin/steamcmd && steamcmd +quit
 
-# Set up Steam directories and libraries
+# Set up Steam directories and libraries for root (used by the `steamcmd
+# +quit` sanity check above, and any RUN steps a downstream Dockerfile adds
+# while still root). These almost always land empty at build time - nothing
+# has been steamcmd-installed into linux32/64 yet - which is exactly why this
+# can't be the only place this happens: see dockerify's
+# setup_steam_client_symlinks(), which does the same thing for whichever user
+# actually runs the server, retried right before it's spawned.
 RUN mkdir -p /root/.steam \
     && ln -s /root/.local/share/Steam/steamcmd/linux32 /root/.steam/sdk32 \
     && ln -s /root/.local/share/Steam/steamcmd/linux64 /root/.steam/sdk64 \
     && ln -s /root/.steam/sdk32/steamclient.so /root/.steam/sdk32/steamservice.so || true \
     && ln -s /root/.steam/sdk64/steamclient.so /root/.steam/sdk64/steamservice.so || true
 
-ENV LD_LIBRARY_PATH="/root/.steam/sdk32:/root/.steam/sdk64:$LD_LIBRARY_PATH"
+# Covers both root (build-time RUN steps) and the `steam` user (the runtime
+# user in every final image) - a symlink only created under /root/.steam is
+# useless to the steam user's process, and a missing entry here is silently
+# ignored by the dynamic linker, so listing both unconditionally is safe.
+ENV LD_LIBRARY_PATH="/root/.steam/sdk32:/root/.steam/sdk64:/home/steam/.steam/sdk32:/home/steam/.steam/sdk64:$LD_LIBRARY_PATH"
 
 # Ensure no existing user/group with UID/GID 1000
 RUN if getent passwd 1000; then userdel -r "$(getent passwd 1000 | cut -d: -f1)"; fi \
@@ -163,11 +173,17 @@ USER root
 COPY --chmod=755 scripts/scripts.d/20-proton-init.sh /opt/steamcmd-bases/scripts.d/
 COPY --chmod=755 scripts/scripts.d/99-cleanup.sh /opt/steamcmd-bases/scripts.d/
 
-# Add symbolic links for libraries
+# Add symbolic links for libraries. (steam's own ~/.steam/sdk32|64 ->
+# steamclient.so is deliberately NOT set up here: at this point in the build
+# nothing has run steamcmd as the `steam` user yet, so there's nothing real
+# to link to, and a symlink created here would be under the wrong user
+# anyway once a downstream image's `RUN steamcmd ...` actually populates it.
+# dockerify's setup_steam_client_symlinks() - run automatically by
+# `dockerify run` right before launching, and available manually as
+# `dockerify link-steam-client` - does this correctly as the `steam` user
+# once steamcmd has actually installed something.)
 RUN ln -s /usr/lib/i386-linux-gnu/libncurses.so.6 /usr/lib/i386-linux-gnu/libncurses.so.5 2>/dev/null || true \
     && ln -s /usr/lib/x86_64-linux-gnu/libncurses.so.6 /usr/lib/x86_64-linux-gnu/libncurses.so.5 2>/dev/null || true \
-    && mkdir -p /home/steam/.steam/sdk64 \
-    && ln -sf /root/.steam/sdk64/steamclient.so /home/steam/.steam/sdk64/steamclient.so 2>/dev/null || true \
     && chown -R steam:steam /home/steam
 
 # The "current" symlink (created by dockerify install proton above) keeps

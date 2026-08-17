@@ -145,7 +145,22 @@ dockerify proton use GE-Proton8-2        # switch the "current" symlink
 
 # Diagnose the environment (installations, env vars, display, libraries)
 dockerify diagnose
+
+# (Re)link ~/.steam/sdk32|64 -> steamcmd's install dir for the current user.
+# `dockerify run` already does this automatically right before launching -
+# this is for manual use, e.g. right after `steamcmd +app_update` in a
+# downstream Dockerfile's RUN step.
+dockerify link-steam-client
 ```
+
+> **Why `dockerify run` matters for Proton games:** Proton's Steamworks
+> bridge (lsteamclient) loads `steamclient.so` through `~/.steam/sdk32|64`,
+> which have to be symlinked into wherever steamcmd actually installed it -
+> and that has to happen as the user running the server, not as root during
+> `docker build` (a symlink under `/root/.steam` is invisible to the `steam`
+> user's process). `dockerify run` handles this automatically before every
+> launch; skipping it (e.g. calling `proton run`/`wine` directly) will hang
+> or fail in `SteamGameServer_Init()`.
 
 ## Extending with Custom Scripts
 

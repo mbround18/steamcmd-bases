@@ -49,6 +49,51 @@ pub fn parse_release_tag(body: &str) -> Result<String, String> {
         .ok_or_else(|| "GitHub API response had no tag_name".to_string())
 }
 
+/// (Re)create ~/.steam/sdk32|64 -> wherever steamcmd actually put its
+/// libraries, and steamservice.so -> steamclient.so inside each. Proton's
+/// Steamworks bridge (lsteamclient) reads steamclient.so through this path,
+/// and SteamGameServer_Init() hangs/fails without it.
+///
+/// This MUST run as the user that will actually run the server, and MUST be
+/// retried right before spawning it rather than only once at image-build
+/// time: a symlink created as root during `docker build` lands under
+/// /root/.steam, which the runtime `steam` user can't use at all, and
+/// steamcmd may not have downloaded anything into steamcmd/linux32|64 yet
+/// the first time this runs anyway. Safe to call repeatedly - each half is
+/// only linked once real content shows up, and it silently no-ops for
+/// whichever arch isn't present yet.
+///
+/// Returns a description of each symlink actually (re)created, for logging.
+pub fn setup_steam_client_symlinks(home: &Path) -> Vec<String> {
+    let mut created = Vec::new();
+    let steamcmd_dir = home.join(".local/share/Steam/steamcmd");
+    let steam_dir = home.join(".steam");
+
+    for (sdk, arch_dir) in [("sdk32", "linux32"), ("sdk64", "linux64")] {
+        let source_dir = steamcmd_dir.join(arch_dir);
+        let sdk_link = steam_dir.join(sdk);
+
+        if source_dir.is_dir() && !sdk_link.is_dir() {
+            let _ = std::fs::create_dir_all(&steam_dir);
+            let _ = std::fs::remove_file(&sdk_link);
+            if std::os::unix::fs::symlink(&source_dir, &sdk_link).is_ok() {
+                created.push(format!("{} -> {}", sdk_link.display(), source_dir.display()));
+            }
+        }
+
+        let steamclient = sdk_link.join("steamclient.so");
+        let steamservice = sdk_link.join("steamservice.so");
+        if steamclient.is_file() && !steamservice.is_file() {
+            let _ = std::fs::remove_file(&steamservice);
+            if std::os::unix::fs::symlink(&steamclient, &steamservice).is_ok() {
+                created.push(format!("{} -> {}", steamservice.display(), steamclient.display()));
+            }
+        }
+    }
+
+    created
+}
+
 pub fn default_compat_dir(home: &Path) -> PathBuf {
     home.join(".steam/root/compatibilitytools.d")
 }
@@ -253,6 +298,65 @@ mod tests {
     #[test]
     fn parse_release_tags_rejects_non_array() {
         assert!(parse_release_tags(r#"{"tag_name": "x"}"#).is_err());
+    }
+
+    #[test]
+    fn steam_client_symlinks_noop_when_steamcmd_hasnt_run() {
+        let home = tempfile::tempdir().unwrap();
+        assert!(setup_steam_client_symlinks(home.path()).is_empty());
+    }
+
+    #[test]
+    fn steam_client_symlinks_links_sdk_dir_once_present() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(home.path().join(".local/share/Steam/steamcmd/linux64")).unwrap();
+
+        let created = setup_steam_client_symlinks(home.path());
+        assert_eq!(created.len(), 1);
+        assert!(home.path().join(".steam/sdk64").is_dir());
+        // linux32 wasn't populated - no failure, just nothing to link yet.
+        assert!(!home.path().join(".steam/sdk32").exists());
+    }
+
+    #[test]
+    fn steam_client_symlinks_links_steamservice_once_steamclient_exists() {
+        let home = tempfile::tempdir().unwrap();
+        let linux64 = home.path().join(".local/share/Steam/steamcmd/linux64");
+        std::fs::create_dir_all(&linux64).unwrap();
+        std::fs::write(linux64.join("steamclient.so"), b"fake").unwrap();
+
+        setup_steam_client_symlinks(home.path());
+        let steamservice = home.path().join(".steam/sdk64/steamservice.so");
+        assert!(steamservice.is_file());
+    }
+
+    #[test]
+    fn steam_client_symlinks_idempotent_second_call_creates_nothing() {
+        let home = tempfile::tempdir().unwrap();
+        let linux64 = home.path().join(".local/share/Steam/steamcmd/linux64");
+        std::fs::create_dir_all(&linux64).unwrap();
+        std::fs::write(linux64.join("steamclient.so"), b"fake").unwrap();
+
+        setup_steam_client_symlinks(home.path());
+        assert!(setup_steam_client_symlinks(home.path()).is_empty());
+    }
+
+    #[test]
+    fn steam_client_symlinks_retries_after_steamcmd_populates_later() {
+        let home = tempfile::tempdir().unwrap();
+
+        // First call: steamcmd hasn't downloaded anything yet.
+        assert!(setup_steam_client_symlinks(home.path()).is_empty());
+
+        // steamcmd runs (e.g. via `+app_update`) and populates linux64.
+        let linux64 = home.path().join(".local/share/Steam/steamcmd/linux64");
+        std::fs::create_dir_all(&linux64).unwrap();
+        std::fs::write(linux64.join("steamclient.so"), b"fake").unwrap();
+
+        // Retry right before spawning the server: this time it links.
+        let created = setup_steam_client_symlinks(home.path());
+        assert_eq!(created.len(), 2); // sdk64 dir + steamservice.so
+        assert!(home.path().join(".steam/sdk64/steamclient.so").is_file());
     }
 
     #[test]
