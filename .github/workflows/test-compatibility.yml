@@ -18,7 +18,7 @@ jobs:
           - x86_64-pc-windows-gnu
           - x86_64-apple-darwin
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -29,35 +29,43 @@ jobs:
       - name: Install cross (for Windows/macOS targets)
         run: cargo install cross
 
+      # test-exe is cross-platform and gets built for every target. dockerify
+      # is Linux-only (it shells out to apt/wine/proton, and uses
+      # std::os::unix::fs::symlink which doesn't even compile for Windows),
+      # and is only ever COPY'd into the Linux Docker images, so it's only
+      # built alongside test-exe for the Linux target.
       - name: Build test-exe for ${{ matrix.target }}
         run: |
           if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-gnu" ]]; then
-            cargo build --release --target ${{ matrix.target }}
+            cargo build --release --target ${{ matrix.target }} --bin test-exe --bin dockerify
           else
-            cross build --release --target ${{ matrix.target }}
+            cross build --release --target ${{ matrix.target }} --bin test-exe
           fi
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-exe-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/test-exe*
+          path: |
+            target/${{ matrix.target }}/release/test-exe*
+            target/${{ matrix.target }}/release/dockerify*
           retention-days: 7
+          if-no-files-found: ignore
 
   test-linux:
     name: Test on Linux
     runs-on: ubuntu-latest
     needs: build-test-exe
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Download Linux test executable
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: test-exe-x86_64-unknown-linux-gnu
 
       - name: Make executable
-        run: chmod +x test-exe
+        run: chmod +x test-exe dockerify
 
       - name: Run test executable directly
         run: ./test-exe --json
@@ -68,10 +76,10 @@ jobs:
       - name: Install Wine
         run: |
           sudo dpkg --add-architecture i386
-          sudo apt-get update
-          wget -q https://dl.winehq.org/wine-builds/winehq.key -O- | sudo apt-key add -
-          sudo apt-get install -y curl gnupg2 software-properties-common
-          curl -q https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources | sudo tee /etc/apt/sources.list.d/winehq.list > /dev/null
+          sudo mkdir -pm755 /etc/apt/keyrings
+          sudo wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key
+          sudo chmod 644 /etc/apt/keyrings/winehq-archive.key
+          sudo wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --install-recommends winehq-stable winetricks cabextract
 
@@ -87,10 +95,10 @@ jobs:
     runs-on: windows-latest
     needs: build-test-exe
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Download Windows test executable
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: test-exe-x86_64-pc-windows-gnu
 
@@ -114,10 +122,10 @@ jobs:
     runs-on: macos-latest
     needs: build-test-exe
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Download macOS test executable
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: test-exe-x86_64-apple-darwin
 
@@ -149,24 +157,24 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-test-exe
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Download Linux test executable
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: test-exe-x86_64-unknown-linux-gnu
 
-      - name: Copy test executable to build context
+      - name: Copy binaries to build context
         run: |
           mkdir -p target/release
-          cp test-exe target/release/
-          chmod +x target/release/test-exe
+          cp test-exe dockerify target/release/
+          chmod +x target/release/test-exe target/release/dockerify
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build base image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           target: base
@@ -174,7 +182,7 @@ jobs:
           tags: steamcmd:base-test
 
       - name: Build wine image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           target: wine
@@ -182,7 +190,7 @@ jobs:
           tags: steamcmd:wine-test
 
       - name: Build proton image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           target: proton
