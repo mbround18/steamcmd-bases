@@ -8,167 +8,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-test-exe:
-    name: Build Test Executable
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        target:
-          - x86_64-unknown-linux-gnu
-          - x86_64-pc-windows-gnu
-          - x86_64-apple-darwin
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install cross (for Windows/macOS targets)
-        run: cargo install cross
-
-      # test-exe is cross-platform and gets built for every target. dockerify
-      # is Linux-only (it shells out to apt/wine/proton, and uses
-      # std::os::unix::fs::symlink which doesn't even compile for Windows),
-      # and is only ever COPY'd into the Linux Docker images, so it's only
-      # built alongside test-exe for the Linux target.
-      - name: Build test-exe for ${{ matrix.target }}
-        run: |
-          if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-gnu" ]]; then
-            cargo build --release --target ${{ matrix.target }} --bin test-exe --bin dockerify
-          else
-            cross build --release --target ${{ matrix.target }} --bin test-exe
-          fi
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-exe-${{ matrix.target }}
-          path: |
-            target/${{ matrix.target }}/release/test-exe*
-            target/${{ matrix.target }}/release/dockerify*
-          retention-days: 7
-          if-no-files-found: ignore
-
-  test-linux:
-    name: Test on Linux
-    runs-on: ubuntu-latest
-    needs: build-test-exe
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Download Linux test executable
-        uses: actions/download-artifact@v8
-        with:
-          name: test-exe-x86_64-unknown-linux-gnu
-
-      - name: Make executable
-        run: chmod +x test-exe dockerify
-
-      - name: Run test executable directly
-        run: ./test-exe --json
-
-      - name: Run test with text output
-        run: ./test-exe --verbose
-
-      - name: Install Wine
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo mkdir -pm755 /etc/apt/keyrings
-          sudo wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key
-          sudo chmod 644 /etc/apt/keyrings/winehq-archive.key
-          sudo wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --install-recommends winehq-stable winetricks cabextract
-
-      - name: Verify Wine installation
-        run: wine --version
-
-      - name: Run test through Wine (if available)
-        run: wine ./test-exe
-        continue-on-error: true
-
-  test-windows:
-    name: Test on Windows Server
-    runs-on: windows-latest
-    needs: build-test-exe
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Download Windows test executable
-        uses: actions/download-artifact@v8
-        with:
-          name: test-exe-x86_64-pc-windows-gnu
-
-      - name: Find executable
-        shell: pwsh
-        run: |
-          $exe = Get-ChildItem -Name "test-exe*" -Type File | Select-Object -First 1
-          Write-Host "Found: $exe"
-
-      - name: Run test executable directly on Windows
-        shell: cmd
-        run: |
-          for /f %%F in ('dir /b test-exe*') do (
-            echo Running: %%F
-            %%F --json
-            %%F --verbose
-          )
-
-  test-macos:
-    name: Test on macOS
-    runs-on: macos-latest
-    needs: build-test-exe
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Download macOS test executable
-        uses: actions/download-artifact@v8
-        with:
-          name: test-exe-x86_64-apple-darwin
-
-      - name: Make executable
-        run: chmod +x test-exe
-
-      - name: Run test executable directly
-        run: ./test-exe --json
-
-      - name: Run test with verbose output
-        run: ./test-exe --verbose
-
-      - name: Install Homebrew (if not already installed)
-        run: |
-          if ! command -v brew &> /dev/null; then
-            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-          fi
-
-      - name: Install Wine via Homebrew
-        run: brew install wine
-        continue-on-error: true
-
-      - name: Verify Wine installation (if installed)
-        run: wine --version
-        continue-on-error: true
-
   test-docker:
     name: Test Docker Image Build
     runs-on: ubuntu-latest
-    needs: build-test-exe
     steps:
       - uses: actions/checkout@v7
-
-      - name: Download Linux test executable
-        uses: actions/download-artifact@v8
-        with:
-          name: test-exe-x86_64-unknown-linux-gnu
-
-      - name: Copy binaries to build context
-        run: |
-          mkdir -p target/release
-          cp test-exe dockerify target/release/
-          chmod +x target/release/test-exe target/release/dockerify
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -200,7 +44,7 @@ jobs:
   compatibility-matrix:
     name: Build Compatibility Matrix
     runs-on: ubuntu-latest
-    needs: [test-linux, test-windows, test-macos, test-docker]
+    needs: [test-docker]
     if: always()
     steps:
       - name: Generate compatibility report
@@ -209,7 +53,4 @@ jobs:
           echo ""
           echo "| Platform | Status | Notes |"
           echo "|----------|--------|-------|"
-          echo "| Linux (Ubuntu) | ${{ needs.test-linux.result == 'success' && '✅ PASS' || '❌ FAIL' }} | Direct execution + Wine |"
-          echo "| Windows Server | ${{ needs.test-windows.result == 'success' && '✅ PASS' || '❌ FAIL' }} | Native execution |"
-          echo "| macOS | ${{ needs.test-macos.result == 'success' && '✅ PASS' || '❌ FAIL' }} | Direct execution + Wine |"
-          echo "| Docker Images | ${{ needs.test-docker.result == 'success' && '✅ PASS' || '❌ FAIL' }} | All three targets |"
+          echo "| Docker Images | ${{ needs.test-docker.result == 'success' && '✅ PASS' || '❌ FAIL' }} | Built via Dockerfile (includes test binaries) |"

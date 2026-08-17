@@ -1,6 +1,20 @@
 # syntax=docker/dockerfile:1.20
 ARG UBUNTU_VERSION=24.04
 
+# Builder stage: compile test-exe and dockerify inside the image so CI doesn't
+# need to produce artifacts on the host. Keeps final images self-contained.
+FROM rust:latest AS rust-builder
+WORKDIR /workspace
+# Cache cargo registry & target between Docker builds (builder cache hints only)
+COPY Cargo.toml Cargo.lock ./
+COPY crates/test-exe/Cargo.toml crates/test-exe/
+COPY crates/dockerify/Cargo.toml crates/dockerify/
+RUN mkdir -p src && echo "fn main(){}" > src/main.rs || true
+# Fetch dependencies only to populate cargo cache before copying full source
+RUN cargo fetch || true
+COPY . .
+RUN cargo build --release --bin test-exe --bin dockerify
+
 FROM ubuntu:${UBUNTU_VERSION} AS steamcmd-base
 # Fail RUN pipelines (e.g. `wget ... | debconf-set-selections`) on any
 # non-zero exit, not just the last command's - inherited by every later
@@ -103,10 +117,9 @@ ADD --chmod=755 https://raw.githubusercontent.com/Winetricks/winetricks/master/s
 # Copy Wine-specific scripts
 COPY --chmod=755 scripts/scripts.d/10-wine-init.sh /opt/steamcmd-bases/scripts.d/
 
-# Copy pre-built binaries: test-exe (compatibility test executable) and
-# dockerify (installs/runs Wine & Proton - see crates/dockerify)
-COPY --chmod=755 target/release/test-exe /opt/steamcmd-bases/bin/test-exe.exe
-COPY --chmod=755 target/release/dockerify /opt/steamcmd-bases/bin/dockerify
+# Copy built binaries from the rust builder stage
+COPY --from=rust-builder --chmod=755 /workspace/target/release/test-exe /opt/steamcmd-bases/bin/test-exe.exe
+COPY --from=rust-builder --chmod=755 /workspace/target/release/dockerify /opt/steamcmd-bases/bin/dockerify
 
 # Create symlinks for utility scripts
 RUN ln -sf /opt/steamcmd-bases/bin/dockerify /usr/local/bin/dockerify
