@@ -1,0 +1,9 @@
+[build]
+# Default target for local development
+# target = "x86_64-unknown-linux-gnu"
+
+# Enable release optimizations for faster binaries
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

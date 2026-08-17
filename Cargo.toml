@@ -1,0 +1,10 @@
+[workspace]
+members = ["crates/test-exe", "crates/dockerify"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["mbround18"]
+license = "BSD-3-Clause"
+repository = "https://github.com/mbround18/steamcmd-bases"

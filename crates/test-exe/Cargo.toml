@@ -1,0 +1,15 @@
+[package]
+name = "test-exe"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+serde_json = "1.0"
+chrono = "0.4"
+ash = "0.38"
+
+[[bin]]
+name = "test-exe"
+path = "src/main.rs"
