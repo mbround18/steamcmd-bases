@@ -124,54 +124,27 @@ All games installed using the provided utilities will be placed in `/home/steam/
 
 ### Available Utility Scripts
 
-#### game-launcher
+#### dockerify
 
-A unified script for launching games with either Wine or Proton:
-
-```bash
-# Install and run a game (automatically detects Wine or Proton)
-game-launcher --appid 1161040 --install /home/steam/game/server.exe -port 28015
-
-# Force using Proton
-game-launcher --proton --appid 1161040 --install /home/steam/game/server.exe -port 28015
-```
-
-#### proton-run
-
-Simplified interface for running executables with Proton:
+A single tool for installing, running, and troubleshooting Wine/Proton (see [crates/dockerify](crates/dockerify)) - it replaces the old `proton-run`/`proton-manager`/`proton-diagnose` shell scripts:
 
 ```bash
-proton-run /home/steam/game/server.exe -port 28015
-```
+# Install Wine or a specific/latest Proton-GE version
+dockerify install wine
+dockerify install proton --version GE-Proton9-20   # or --version latest
 
-#### proton-manager
+# Run an executable (auto-detects Wine vs Proton, preferring Proton)
+dockerify run /home/steam/game/server.exe -port 28015
+dockerify run --wine /opt/steamcmd-bases/bin/test-exe.exe --verbose
+dockerify run --proton /opt/steamcmd-bases/bin/test-exe.exe --json
 
-Utility for managing multiple Proton versions:
+# Manage installed Proton-GE versions
+dockerify proton list                    # installed versions
+dockerify proton available               # versions on GitHub
+dockerify proton use GE-Proton8-2        # switch the "current" symlink
 
-```bash
-# List available Proton versions from GitHub
-proton-manager available
-
-# Install a specific Proton version
-proton-manager install GE-Proton8-2
-
-# Switch to using a specific Proton version
-proton-manager use GE-Proton8-2
-
-# List installed versions
-proton-manager list
-```
-
-#### proton-diagnose
-
-Utility for troubleshooting Proton environments:
-
-```bash
-# Run diagnostics
-proton-diagnose
-
-# Initialize a fresh Wine prefix
-proton-diagnose --init-prefix
+# Diagnose the environment (installations, env vars, display, libraries)
+dockerify diagnose
 ```
 
 ## Extending with Custom Scripts
@@ -207,16 +180,11 @@ If you need a specific version of Proton-GE:
 ```dockerfile
 FROM mbround18/steamcmd-proton:latest
 
-# Download and install specific Proton version (if needed)
-RUN mkdir -p /tmp/proton-ge \
-    && cd /tmp/proton-ge \
-    && curl -sL "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton7-38/GE-Proton7-38.tar.gz" -o proton.tar.gz \
-    && tar xzf proton.tar.gz -C /home/steam/.steam/root/compatibilitytools.d/ \
-    && rm -rf /tmp/proton-ge
-
-# Update PROTON_PATH to use the specific version
-ENV PROTON_PATH=/home/steam/.steam/root/compatibilitytools.d/GE-Proton7-38/proton
+# Install a specific Proton-GE version and repoint "current" at it
+RUN dockerify install proton --version GE-Proton7-38
 ```
+
+`PROTON_PATH` stays pointed at `.../compatibilitytools.d/current/proton`, so no `ENV` override is needed.
 
 ### Using winetricks
 
@@ -273,18 +241,270 @@ CMD Xvfb :99 -screen 0 1024x768x16 & \
 
 ## Building the Images
 
-To build the images locally:
+Images are built with [`docker buildx bake`](https://docs.docker.com/build/bake/) via `docker-bake.hcl`, which defines the `base`, `wine`, and `proton` targets and their registry cache config in one place (used for both local builds and `--push`).
+
+To build all three images locally (also builds the Rust `test-exe` binary first, since the `wine`/`proton` targets `COPY` it in):
 
 ```bash
 make docker-build
 ```
 
-To push the images:
+To build a single target directly:
+
+```bash
+cargo build --release
+docker buildx bake proton --load
+```
+
+To pin an exact GE-Proton release instead of whatever is newest on GitHub at build time:
+
+```bash
+PROTON_VERSION=GE-Proton9-20 docker buildx bake proton --load
+```
+
+To push the images (and cache) to the registry:
 
 ```bash
 make docker-push
 ```
 
-## License
+## System Management & Version Control (v2.0+)
+
+This repository now includes enhanced dependency management and cross-platform testing to ensure reliability across Windows, Linux, and macOS environments.
+
+### Core Features
+
+- **Explicit Version Management**: OS, Wine, Proton, and SteamCMD versions are explicitly managed and detectable
+- **Dependency Library**: Shell library (`scripts/lib/deps.sh`) provides functions for detecting and validating all components
+- **Idempotent Scripts**: All initialization scripts can be safely run multiple times
+- **Cross-Platform Testing**: Rust-based test executable validates functionality on Windows Server, Linux, and macOS
+- **Multi-Stage Docker**: Efficient layer reuse across three image variants
+
+### Key Maxims
+
+1. **Always manage OS/Wine/Proton versions explicitly** - Every environment has detectable versions
+2. **Dependency detection over assumption** - Always check before assuming tools are installed
+3. **Idempotency** - Scripts must be safe to run repeatedly
+4. **Cross-platform validation** - Test on real Windows, Linux, and macOS platforms
+5. **Graceful degradation** - Non-critical failures don't block container startup
+6. **Persistent environment** - Configuration survives across restarts
+7. **Shared library design** - Common logic in `scripts/lib/deps.sh`
+8. **Explicit user context** - All operations run as steam:1000 user
+
+See [docs/maxims.md](docs/maxims.md) for full details.
+
+### Architecture
+
+The repository is organized as:
+
+```text
+.
+├── crates/
+│   └── test-exe/              # Rust binary for cross-platform testing
+│       └── src/main.rs        # Test executable (Windows/Linux/Mac)
+├── scripts/
+│   ├── lib/
+│   │   └── deps.sh            # Dependency management library
+│   ├── bin/
+│   │   └── dockerify run /opt/steamcmd-bases/bin/test-exe.exe       # Wine/Proton test wrapper
+│   └── scripts.d/
+│       ├── 00-common-init.sh  # Common initialization
+│       ├── 10-wine-init.sh    # Wine environment setup
+│       ├── 20-proton-init.sh  # Proton environment setup
+│       └── 99-cleanup.sh      # Cleanup handlers
+├── .github/workflows/
+│   └── test-compatibility.yml # Multi-platform CI/CD tests
+├── docs/
+│   ├── maxims.md              # Design principles
+│   └── architecture.md        # Technical architecture
+└── Dockerfile                 # Multi-stage container build
+```
+
+See [docs/architecture.md](docs/architecture.md) for detailed technical design.
+
+### Development: Building Test Executable
+
+The Rust binary is used to validate Wine/Proton installations across platforms.
+
+#### Local Development
+
+```bash
+# Build for your current platform
+cargo build --release
+
+# Test the binary locally
+./target/release/test-exe --json
+./target/release/test-exe --verbose
+
+# See all options
+./target/release/test-exe --help
+```
+
+#### Cross-Compilation (All Platforms)
+
+Install cross-compilation tool:
+
+```bash
+cargo install cross
+```
+
+Build for all targets:
+
+```bash
+# Linux (native)
+cargo build --release --target x86_64-unknown-linux-gnu
+
+# Windows
+cross build --release --target x86_64-pc-windows-gnu
+
+# macOS
+cross build --release --target x86_64-apple-darwin
+```
+
+Binaries are output to `target/*/release/test-exe*`
+
+#### Integration with Docker
+
+Before building Docker images, build the Linux test executable:
+
+```bash
+cargo build --release --target x86_64-unknown-linux-gnu
+```
+
+This binary is automatically copied into Docker images during build.
+
+### Testing: Multi-Platform Validation
+
+#### Local Testing
+
+Test on your current system:
+
+```bash
+# Test directly
+./target/release/test-exe --json
+
+# Test through Wine (if installed)
+wine ./target/release/test-exe --verbose
+```
+
+#### Docker Testing
+
+Test inside containers:
+
+```bash
+# Build image (compose.yaml only runs pre-built images; see "Building the Images" above)
+cargo build --release && docker buildx bake wine --load
+
+# Run tests in container
+docker compose run steamcmd-wine dockerify run /opt/steamcmd-bases/bin/test-exe.exe --json
+```
+
+#### CI/CD Testing (GitHub Actions)
+
+The `.github/workflows/test-compatibility.yml` automatically:
+
+1. **Builds** test-exe for Windows, Linux, and macOS
+2. **Tests** on each platform (native execution)
+3. **Tests** through Wine/Proton when available
+4. **Builds** all Docker images
+5. **Reports** compatibility matrix
+
+Push to GitHub to trigger tests, or manually run:
+
+```bash
+gh workflow run test-compatibility.yml
+```
+
+### Dependency Management
+
+All initialization scripts use the centralized `deps.sh` library for version detection and management.
+
+#### Checking System Status
+
+In containers or local environments:
+
+```bash
+# Source the library
+source scripts/lib/deps.sh
+
+# Check what's installed
+detect_wine_version
+detect_proton_version
+get_os_type
+get_os_version
+
+# Check if components are valid
+is_wine_installed && echo "Wine found"
+is_proton_installed && echo "Proton found"
+is_wine_prefix_valid && echo "Wine prefix initialized"
+
+# Print summary
+print_deps_summary
+```
+
+#### Installing Components
+
+The library provides installation functions for different platforms:
+
+```bash
+# Install Wine on Debian/Ubuntu
+install_wine_debian "stable"
+
+# Install Wine on macOS
+install_wine_macos
+
+# Install Proton-GE
+install_proton_ge "latest"
+```
+
+#### Custom Initialization
+
+To add custom dependency management:
+
+1. Edit `scripts/lib/deps.sh` to add detection/installation functions
+2. Create new init script in `scripts/scripts.d/` (use numeric prefix for ordering)
+3. Source `deps.sh` and use functions
+4. Copy script into Dockerfile if container-based
+
+See [docs/maxims.md#implementation-guidelines](docs/maxims.md#implementation-guidelines) for examples.
+
+### Diagnostics & Troubleshooting
+
+#### Verify Installation
+
+```bash
+# Check all components
+source scripts/lib/deps.sh
+print_deps_summary
+```
+
+#### Run Diagnostics in Container
+
+```bash
+docker compose run steamcmd-proton dockerify diagnose
+```
+
+#### Test Wine/Proton Compatibility
+
+```bash
+# Direct test
+docker compose run steamcmd-wine dockerify run /opt/steamcmd-bases/bin/test-exe.exe --json
+
+# With verbose output
+docker compose run steamcmd-wine dockerify run --wine /opt/steamcmd-bases/bin/test-exe.exe --verbose
+
+# Force Proton (skip Wine)
+docker compose run steamcmd-proton dockerify run --proton /opt/steamcmd-bases/bin/test-exe.exe --json
+```
+
+#### Check Environment Variables
+
+```bash
+# In container, after initialization
+docker compose run steamcmd-wine env | grep WINE
+
+# Check persisted variables
+docker compose run steamcmd-wine cat /home/steam/.bashrc
+```
 
 This project is licensed under the BSD 3-Clause License - see the [LICENSE](LICENSE) file for details.
