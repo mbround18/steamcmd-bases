@@ -29,13 +29,16 @@ jobs:
       - name: paws docker (${{ matrix.target }})
         env:
           DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
         run: |
           paws docker \
             --image "mbround18/steamcmd" \
             --target "${{ matrix.target }}" \
             --prepend-target \
+            --registries ghcr.io \
             --with-latest \
-            --dockerhub-username mbround18
+            --dockerhub-username mbround18 \
+            --ghcr-username mbround18
 
   tagger:
     needs: docker-release
