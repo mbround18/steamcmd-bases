@@ -54,11 +54,6 @@ jobs:
       - uses: mbround18/paws/actions/paws-up@main
 
       - name: Compute and push next tag
-        run: |
-          set -euo pipefail
-          version=$(paws semver --branch main)
-          echo "Tagging $version"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "$version"
-          git push origin "$version"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: paws semver --branch main --push
