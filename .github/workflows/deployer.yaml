@@ -13,19 +13,52 @@ on:
 
 jobs:
   docker-release:
+    name: Build ${{ matrix.target }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         target: [base, wine, proton]
-    uses: mbround18/gh-reusable/.github/workflows/docker-release.yaml@main
-    with:
-      image: "mbround18/steamcmd"
-      target: "${{ matrix.target }}"
-      prepend_target: true
-    secrets: inherit
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: mbround18/paws/actions/paws-up@main
+
+      - name: paws docker (${{ matrix.target }})
+        env:
+          DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          paws docker \
+            --image "mbround18/steamcmd" \
+            --target "${{ matrix.target }}" \
+            --prepend-target \
+            --registries ghcr.io \
+            --with-latest \
+            --dockerhub-username mbround18 \
+            --ghcr-username mbround18
 
   tagger:
     needs: docker-release
     if: ${{ github.ref == 'refs/heads/main' }}
-    uses: mbround18/gh-reusable/.github/workflows/tagger.yaml@main
-    secrets: inherit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: mbround18/paws/actions/paws-up@main
+
+      - name: Compute and push next tag
+        run: |
+          set -euo pipefail
+          version=$(paws semver --branch main)
+          echo "Tagging $version"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$version"
+          git push origin "$version"
