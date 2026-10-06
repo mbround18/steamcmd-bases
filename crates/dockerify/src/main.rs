@@ -249,9 +249,10 @@ fn install_wine() -> Result<i32, String> {
 set -e
 sudo dpkg --add-architecture i386
 sudo mkdir -pm755 /etc/apt/keyrings
-sudo wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key
-sudo chmod 644 /etc/apt/keyrings/winehq-archive.key
+sudo wget -O /etc/apt/keyrings/winehq-archive.asc https://dl.winehq.org/wine-builds/winehq.key
+sudo chmod 644 /etc/apt/keyrings/winehq-archive.asc
 sudo wget -NP /etc/apt/sources.list.d/ "https://dl.winehq.org/wine-builds/ubuntu/dists/$(lsb_release -cs)/winehq-$(lsb_release -cs).sources"
+sudo sed -i 's#winehq-archive\.key#winehq-archive.asc#' "/etc/apt/sources.list.d/winehq-$(lsb_release -cs).sources"
 sudo apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --install-recommends winehq-stable winetricks cabextract
 "#;

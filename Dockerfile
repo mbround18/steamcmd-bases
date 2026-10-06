@@ -105,10 +105,11 @@ RUN --mount=type=cache,target=/var/cache/apt \
     apt-get update && apt-get install -y --no-install-recommends ca-certificates gnupg2 software-properties-common && \
     dpkg --add-architecture i386 && \
     mkdir -pm755 /etc/apt/keyrings && \
-    wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key && \
-    chmod 644 /etc/apt/keyrings/winehq-archive.key && \
+    wget -O /etc/apt/keyrings/winehq-archive.asc https://dl.winehq.org/wine-builds/winehq.key && \
+    chmod 644 /etc/apt/keyrings/winehq-archive.asc && \
     . /etc/os-release && \
     wget -NP /etc/apt/sources.list.d/ "https://dl.winehq.org/wine-builds/ubuntu/dists/${VERSION_CODENAME}/winehq-${VERSION_CODENAME}.sources" && \
+    sed -i 's#winehq-archive\.key#winehq-archive.asc#' "/etc/apt/sources.list.d/winehq-${VERSION_CODENAME}.sources" && \
     apt-get update && \
     apt-get install -y --install-recommends winehq-stable winbind cabextract
 
