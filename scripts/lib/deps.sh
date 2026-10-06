@@ -229,16 +229,18 @@ install_wine_debian() {
     if ! grep -q "winehq.org" /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; then
         sudo mkdir -pm755 /etc/apt/keyrings
 
-        sudo wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key || {
+        sudo wget -O /etc/apt/keyrings/winehq-archive.asc https://dl.winehq.org/wine-builds/winehq.key || {
             echo -e "${RED}✗${NC} Failed to add Wine GPG key"
             return 1
         }
-        sudo chmod 644 /etc/apt/keyrings/winehq-archive.key
+        sudo chmod 644 /etc/apt/keyrings/winehq-archive.asc
 
         sudo wget -NP /etc/apt/sources.list.d/ "https://dl.winehq.org/wine-builds/ubuntu/dists/$(lsb_release -cs)/winehq-$(lsb_release -cs).sources" || {
             echo -e "${RED}✗${NC} Failed to add Wine repository"
             return 1
         }
+        # apt on newer releases only accepts armored keys with an .asc extension
+        sudo sed -i 's#winehq-archive\.key#winehq-archive.asc#' "/etc/apt/sources.list.d/winehq-$(lsb_release -cs).sources"
     fi
     
     # Install Wine

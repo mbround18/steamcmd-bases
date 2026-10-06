@@ -10,7 +10,7 @@ This document establishes the core principles that guide the steamcmd-bases proj
 
 **Implementation:**
 
-- Dockerfile pins Ubuntu version (default: 24.04)
+- Dockerfile pins Ubuntu version (default: 26.04)
 - SteamCMD is installed from official repository (auto-pinned to stable)
 - Wine version is specified via WineHQ official repository (winehq-stable)
 - Proton-GE version is auto-detected from latest GitHub release or explicitly pinned
@@ -200,7 +200,7 @@ docker compose run steamcmd-wine /opt/steamcmd-bases/bin/test-wine.sh --json
 
 ### Base OS
 
-- **Pinning:** Dockerfile ARG `UBUNTU_VERSION` (default: 24.04)
+- **Pinning:** Dockerfile ARG `UBUNTU_VERSION` (default: 26.04)
 - **Override:** Build argument: `docker build --build-arg UBUNTU_VERSION=22.04 ...`
 
 ## Troubleshooting

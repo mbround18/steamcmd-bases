@@ -29,7 +29,7 @@ This document describes the high-level architecture of steamcmd-bases v2, which 
 │  ┌──────────────────────────────────────────────┐              │
 │  │  GitHub Actions Test Matrix                  │              │
 │  ├──────────────────────────────────────────────┤              │
-│  │ Ubuntu 24.04  → Wine + test-exe              │              │
+│  │ Ubuntu 26.04  → Wine + test-exe              │              │
 │  │ Windows Server → Native + test-exe           │              │
 │  │ macOS Latest  → Wine (optional) + test-exe   │              │
 │  └──────────────────────────────────────────────┘              │
@@ -155,7 +155,7 @@ Orchestrates test-exe execution:
 
 #### Stage 1: `steamcmd-base`
 
-- Ubuntu 24.04
+- Ubuntu 26.04
 - SteamCMD installation
 - steam user (UID 1000)
 - Base scripts and library
@@ -326,7 +326,7 @@ docker compose push
 
 ### Component Versions
 
-- **Base OS:** Ubuntu 24.04 (configurable via ARG)
+- **Base OS:** Ubuntu 26.04 (configurable via ARG)
 - **Wine:** Latest stable from WineHQ (pinned per build)
 - **Proton-GE:** Latest from GloriousEggroll (auto-updated)
 - **test-exe:** Crate version (Cargo.toml)

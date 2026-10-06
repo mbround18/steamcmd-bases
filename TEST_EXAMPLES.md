@@ -277,7 +277,7 @@ $ docker compose run steamcmd-proton bash -c 'source /opt/steamcmd-bases/lib/dep
 System Dependencies Summary
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  OS: ubuntu 24.04
+  OS: ubuntu 26.04
 
   SteamCMD:
     ✓ Installed at /root/.local/share/Steam/steamcmd
