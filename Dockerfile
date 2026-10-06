@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.27
-ARG UBUNTU_VERSION=24.04
+ARG UBUNTU_VERSION=26.04
 
 # Builder stage: compile test-exe and dockerify inside the image so CI doesn't
 # need to produce artifacts on the host. Keeps final images self-contained.
@@ -107,7 +107,8 @@ RUN --mount=type=cache,target=/var/cache/apt \
     mkdir -pm755 /etc/apt/keyrings && \
     wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key && \
     chmod 644 /etc/apt/keyrings/winehq-archive.key && \
-    wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources && \
+    . /etc/os-release && \
+    wget -NP /etc/apt/sources.list.d/ "https://dl.winehq.org/wine-builds/ubuntu/dists/${VERSION_CODENAME}/winehq-${VERSION_CODENAME}.sources" && \
     apt-get update && \
     apt-get install -y --install-recommends winehq-stable winbind cabextract
 
