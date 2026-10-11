@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.27
+# syntax=docker/dockerfile:1.28
 ARG UBUNTU_VERSION=26.04
 
 # Builder stage: compile test-exe and dockerify inside the image so CI doesn't
